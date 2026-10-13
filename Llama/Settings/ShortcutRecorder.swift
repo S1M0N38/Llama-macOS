@@ -110,6 +110,7 @@ struct ShortcutRecorder: View {
 
   @State private var recording = false
   @State private var monitor: Any?
+  @FocusState private var focused: Bool
 
   var body: some View {
     Button {
@@ -118,6 +119,15 @@ struct ShortcutRecorder: View {
       Text(recording ? "Press shortcut…" : (combo?.displayString ?? "Record shortcut"))
         .foregroundStyle(recording || combo == nil ? .secondary : .primary)
     }
+    // While armed, the button takes keyboard focus so the system draws its
+    // focus ring -- like a focused text field -- saying keystrokes are being
+    // captured. The label change alone read like a disabled button.
+    // `.edit` (focus that updates state over time, as a text field's does)
+    // is what lets a click give focus without system-wide "Keyboard
+    // navigation"; a plain Button only has `.activate` focus, which doesn't.
+    .focusable(interactions: .edit)
+    .focused($focused)
+    .onChange(of: recording) { focused = recording }
     // If the row disappears mid-recording (window closed), drop the monitor.
     .onDisappear { stopRecording() }
   }
