@@ -97,8 +97,9 @@ extension GlobalHotkey.Combo {
 
 /// A button that records a key combo: click to arm, then press the desired
 /// shortcut. While armed it swallows keystrokes via a local event monitor;
-/// Escape (or clicking the button again) cancels. Combos without ⌘/⌥/⌃ are
-/// ignored (they'd shadow normal typing system-wide).
+/// Escape, clicking the button again, clicking anywhere else, or switching
+/// apps cancels. Combos without ⌘/⌥/⌃ are ignored (they'd shadow normal
+/// typing system-wide).
 ///
 /// Known quirk (prototype scope): the currently-registered hotkey is still
 /// live while recording, so re-pressing the *current* combo toggles the
@@ -111,6 +112,9 @@ struct ShortcutRecorder: View {
   @State private var recording = false
   @State private var monitor: Any?
   @FocusState private var focused: Bool
+  /// The button's frame in window coordinates (SwiftUI's top-left origin),
+  /// for telling a click outside it apart from one on it.
+  @State private var frameInWindow: CGRect = .zero
 
   var body: some View {
     Button {
@@ -128,13 +132,28 @@ struct ShortcutRecorder: View {
     .focusable(interactions: .edit)
     .focused($focused)
     .onChange(of: recording) { focused = recording }
+    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frameInWindow = $0 }
+    // Switching to another app cancels too -- the local monitor can't see its
+    // keystrokes, so staying armed would just leave a stale ring behind.
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+      stopRecording()
+    }
     // If the row disappears mid-recording (window closed), drop the monitor.
     .onDisappear { stopRecording() }
   }
 
   private func startRecording() {
     recording = true
-    monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+    monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown]) { event in
+      // A click outside the button cancels, like blurring a text field, and
+      // still goes through to whatever was clicked. Clicking empty space
+      // doesn't move keyboard focus on macOS, so this can't hang off focus
+      // changes. A click on the button itself is left to its action, which
+      // already toggles recording off.
+      if event.type == .leftMouseDown {
+        if !isOnButton(event) { stopRecording() }
+        return event
+      }
       if event.keyCode == UInt16(kVK_Escape), event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty {
         stopRecording()
         return nil
@@ -148,6 +167,17 @@ struct ShortcutRecorder: View {
       // keep listening.
       return nil
     }
+  }
+
+  /// Whether a mouse event landed on the button. AppKit's window coordinates
+  /// have a bottom-left origin, SwiftUI's a top-left one -- flip y against
+  /// the content view's height to compare. (Not `contentView.convert`: the
+  /// settings window's content view isn't flipped, so that yields the same
+  /// bottom-left point.)
+  private func isOnButton(_ event: NSEvent) -> Bool {
+    guard let contentView = event.window?.contentView else { return false }
+    let p = event.locationInWindow
+    return frameInWindow.contains(CGPoint(x: p.x, y: contentView.bounds.height - p.y))
   }
 
   private func stopRecording() {
