@@ -127,9 +127,10 @@ extension SettingsWindowController: NSToolbarDelegate {
 
 /// A single settings row: a title and its description stacked in a left
 /// column, with a trailing control (toggle, picker, button) in a right column.
-/// The control is vertically centered against the text block, so the gap
-/// between title and description stays uniform regardless of the control's
-/// height -- unlike a layout where the title shares a row with the control.
+/// The control is top-aligned with the text block in its own column, so the
+/// gap between title and description stays uniform regardless of the
+/// control's height -- unlike a layout where the title shares a row with the
+/// control.
 struct SettingRow<Control: View>: View {
   let title: String
   let description: String
@@ -692,7 +693,8 @@ struct SettingsView: View {
             showingHFTokenSheet = true
           } label: {
             if hfToken.isEmpty {
-              Text("Set")
+              // Ellipsis: the button opens a sheet that asks for input.
+              Text("Set…")
             } else {
               Text(truncatedToken(hfToken))
             }
@@ -1284,17 +1286,12 @@ struct HFTokenSheet: View {
           .foregroundStyle(.secondary)
       }
 
-      TextEditor(text: $tokenText)
-        .font(.system(size: 11, design: .monospaced))
-        .frame(height: 50)
-        .scrollContentBackground(.hidden)
-        .padding(.vertical, 4)
-        .background(Color(nsColor: .textBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-          RoundedRectangle(cornerRadius: 6)
-            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-        )
+      // A plain one-line field: a token is a single word, and Return then
+      // reaches the default Save button instead of inserting a newline.
+      // Monospaced so a pasted token is easy to check character by character.
+      TextField("", text: $tokenText, prompt: Text("hf_…"))
+        .textFieldStyle(.roundedBorder)
+        .font(.system(size: 12, design: .monospaced))
 
       HStack {
         // Validation hint replaces the link once there's something to correct.
