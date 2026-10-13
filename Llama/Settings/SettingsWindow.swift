@@ -311,6 +311,9 @@ struct SettingsSidebar: View {
       // Set explicitly: hosted in an NSSplitViewItem the list doesn't reliably
       // inherit the sidebar look, and without it renders as a plain table.
       .listStyle(.sidebar)
+      // Lower the rows so the first one's selection fill lines up with the top
+      // of the detail pane's first card.
+      .safeAreaPadding(.top, 12)
 
       // The repository link. It lives in the sidebar rather than at the foot of
       // a tab because its job is to tell people who downloaded the app from the
@@ -483,9 +486,14 @@ struct SettingsView: View {
 
   var body: some View {
     form
-      // Pull the grouped form up under the transparent titlebar, so its first
-      // card sits just below the title rather than a band of empty space.
-      .padding(.top, -20)
+      // Nudge the grouped form up so its first card starts 64pt from the
+      // window top, as in System Settings. The form's default inset alone
+      // leaves too big a gap under the title; pulling up further (we used
+      // -20) makes the card butt against the 52pt band that macOS 26+ draws
+      // behind the titlebar on hover and when content scrolls under it.
+      // (Hiding that band with a transparent titlebar isn't an option: the
+      // toolbar row then swallows drags, so the window can't be moved by it.)
+      .padding(.top, -8)
   }
 
   /// The General tab -- how the app itself behaves, as distinct from the
