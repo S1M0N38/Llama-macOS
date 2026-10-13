@@ -397,8 +397,8 @@ final class MenuController: NSObject, NSMenuDelegate {
   // Observe server and download changes while the menu is open.
   private func setupObservers() {
     // Server started/stopped - update icon and views. While a model page is
-    // open, rebuild instead: its Unload row exists only while that model is
-    // loaded, and a plain refresh can't add/remove rows.
+    // open, rebuild instead: its Load/Unload row follows that model's state,
+    // and a plain refresh can't swap rows.
     observe(.LBServerStateDidChange) { [weak self] _ in
       guard let self else { return }
       if self.selectedModelId != nil {
@@ -412,8 +412,8 @@ final class MenuController: NSObject, NSMenuDelegate {
     observe(.LBCLIInstallStateDidChange, rebuildMenu: true)
 
     // Models load/unload inside the running server, without changing its state.
-    // Rebuild an open model page so its Unload row follows those transitions;
-    // refreshing existing views alone cannot add or remove the action.
+    // Rebuild an open model page so its Load/Unload row follows those
+    // transitions; refreshing existing views alone cannot swap the action.
     observe(.LBModelStatusDidChange) { [weak self] _ in
       guard let self else { return }
       if self.selectedModelId != nil {
@@ -658,8 +658,8 @@ final class MenuController: NSObject, NSMenuDelegate {
 
     // Page actions as labeled menu rows -- bezel buttons read as dialog chrome
     // inside a menu and gray out whenever the app isn't frontmost. Chat leads
-    // (the primary action on a model); Unload appears only while the model is
-    // loaded (status-change rebuilds keep it current); Delete closes the set.
+    // (the primary action on a model); Load/Unload follows the model's state
+    // (status-change rebuilds keep it current); Delete closes the set.
     menu.addItem(NSMenuItem.viewItem(with: SeparatorView(height: SeparatorView.pageHeight)))
     // Decision and embedding models can't chat and the request builder only
     // writes chat requests, so both rows are left off their pages -- a Chat
@@ -737,12 +737,29 @@ final class MenuController: NSObject, NSMenuDelegate {
       hfRow?.openInBrowser(url)
     }
     menu.addItem(NSMenuItem.viewItem(with: hfRow))
-    if server.isActive(model: model) {
+    // Load and Unload share one slot, so the row always says what clicking it
+    // will do. Requests already load a model on demand, so Load isn't needed
+    // for anything to work -- it's there because "load the model" is what
+    // people reach for on a model page, and to warm a big model up before
+    // the first request rather than making that request wait on it.
+    // A model counts as active while it's still loading (`activeModelId`), so
+    // Unload shows then too -- the slot is never empty mid-load, and unloading
+    // a loading model cancels the load (the server kills the instance).
+    // Sleeping counts as not active: its memory is already freed, so Load.
+    if server.activeModelId == model.id {
       menu.addItem(NSMenuItem.viewItem(with: ActionItemView(
         title: "Unload", symbol: "eject"
       ) { [weak self] in
         // Keep this action one-way, even if the model unloads before the click.
         self?.server.unloadModel(model)
+      }))
+    } else {
+      menu.addItem(NSMenuItem.viewItem(with: ActionItemView(
+        title: "Load", symbol: "play"
+      ) { [weak self] in
+        // One-way like Unload: a click that lands after the model started
+        // loading by other means just re-requests the same load.
+        self?.server.loadModel(model)
       }))
     }
     // Disk footprint rides the Delete row -- it's the one place the number

@@ -821,8 +821,13 @@ class LlamaServer {
 
     // Remember this as the user's last deliberately-run model, so the
     // global-input capture panel has a sticky target even when nothing is
-    // loaded later.
-    UserSettings.lastUsedModelId = model.id
+    // loaded later. Chat models only: the panel lists nothing else, and the
+    // sticky pick is the most recent stamp overall -- stamping a decision or
+    // embedding model would push the user's chat model out of first place and
+    // drop the panel back to its smallest-model fallback.
+    if model.kind == .chat {
+      UserSettings.lastUsedModelId = model.id
+    }
 
     // Optimistically set status to loading for immediate UI feedback. This also
     // makes the model the derived `activeModelId`. Polling updates to .loaded
