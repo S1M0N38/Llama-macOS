@@ -555,9 +555,7 @@ struct SettingsView: View {
             } label: {
               Text(String(serverPort))
             }
-            .controlSize(.small)
           }
-          .font(.callout)
         }
       }
       .sheet(isPresented: $showingServerPortSheet) {
@@ -683,9 +681,7 @@ struct SettingsView: View {
                 Image(systemName: "folder")
               }
             }
-            .controlSize(.small)
           }
-          .font(.callout)
         }
 
         SettingRow(
@@ -701,8 +697,6 @@ struct SettingsView: View {
               Text(truncatedToken(hfToken))
             }
           }
-          .font(.callout)
-          .controlSize(.small)
         }
       }
       .sheet(isPresented: $showingHFTokenSheet) {
@@ -720,8 +714,6 @@ struct SettingsView: View {
           description: "See exactly how the app starts the server for you."
         ) {
           Button("Show") { showingServerCommandSheet = true }
-            .font(.callout)
-            .controlSize(.small)
         }
 
         // Opened in Console.app rather than an in-app viewer: Console already
@@ -732,8 +724,6 @@ struct SettingsView: View {
           description: "Output from the current server session."
         ) {
           Button("Open") { openServerLog() }
-            .font(.callout)
-            .controlSize(.small)
         }
       }
       .sheet(isPresented: $showingServerCommandSheet) {
@@ -806,7 +796,6 @@ struct SettingsView: View {
                 })
             )
           }
-          .font(.callout)
         }
       }
 
@@ -848,9 +837,7 @@ struct SettingsView: View {
                 Image(systemName: "folder")
               }
             }
-            .controlSize(.small)
           }
-          .font(.callout)
         }
 
           // No hint about the built-in chat's service worker: a browser that
@@ -959,7 +946,6 @@ struct SettingsView: View {
         title: "Allow network access", description: "Bound to an address set outside the app."
       ) {
         Text(address)
-          .font(.callout)
           .foregroundStyle(.secondary)
       }
     } else {
@@ -1240,7 +1226,6 @@ struct PillPicker<Option: Hashable>: View {
           selection = option.value
         } label: {
           Text(option.label)
-            .font(.callout)
             // All segments use primary text -- dimming the unselected ones
             // reads as disabled; the thumb alone marks the selection (matches
             // native segmented controls)

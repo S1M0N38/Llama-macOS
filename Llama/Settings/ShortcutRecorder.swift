@@ -118,7 +118,6 @@ struct ShortcutRecorder: View {
       Text(recording ? "Press shortcut…" : (combo?.displayString ?? "Record shortcut"))
         .foregroundStyle(recording || combo == nil ? .secondary : .primary)
     }
-    .controlSize(.small)
     // If the row disappears mid-recording (window closed), drop the monitor.
     .onDisappear { stopRecording() }
   }
