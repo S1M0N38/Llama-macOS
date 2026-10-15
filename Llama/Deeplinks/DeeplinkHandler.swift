@@ -51,7 +51,7 @@ final class DeeplinkHandler {
       resolved = try await HFRepoResolver.resolve(
         repo: repo,
         quant: quant,
-        token: UserSettings.hfToken
+        token: await HFAuth.token()
       )
     } catch {
       logger.error(

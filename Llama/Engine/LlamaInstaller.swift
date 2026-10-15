@@ -220,7 +220,7 @@ enum LlamaInstaller {
     guard let url = URL(string: urlString) else {
       throw InstallError.downloadFailed("bad URL: \(urlString)")
     }
-    let request = HFRequest.make(url, token: UserSettings.hfToken)
+    let request = HFRequest.make(url, token: await HFAuth.token())
     let (tempURL, response) = try await URLSession.shared.download(for: request)
     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
       let code = (response as? HTTPURLResponse)?.statusCode ?? -1

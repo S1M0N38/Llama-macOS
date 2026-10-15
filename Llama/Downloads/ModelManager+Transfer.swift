@@ -304,10 +304,10 @@ extension ModelManager {
     switch status {
     case 401:
       return
-        "Hugging Face requires authentication for this download. Set a Hugging Face token in Settings and try again."
+        "Hugging Face requires authentication for this download. Sign in to Hugging Face in Settings > Advanced and try again."
     case 403, 429:
       return
-        "Hugging Face refused the download (HTTP \(status)). This usually means a rate limit — try again in a few minutes, or set a Hugging Face token in Settings to lift the limit."
+        "Hugging Face refused the download (HTTP \(status)). This usually means a rate limit — try again in a few minutes, or sign in to Hugging Face in Settings to lift the limit."
     case 404:
       return
         "Hugging Face returned 404 for this file. The repo may have moved or been removed."
@@ -420,6 +420,9 @@ extension ModelManager {
     // re-hashes the on-disk prefix and must not block the UI. The `Task`
     // inherits the main actor, so we resume on it after the `await`.
     Task {
+      // A retry can come hours into a long download, past the signed-in
+      // token's expiry -- renew it before `startWriterTask` reads it.
+      await HFAuth.refreshIfNeeded()
       let writer: PartialWriter
       do {
         writer = try await openPartialWriter(

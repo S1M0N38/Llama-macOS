@@ -201,7 +201,7 @@ class ModelManager: NSObject, URLSessionDataDelegate {
           self.failDownload(
             model: model,
             reason:
-              "Couldn't reach Hugging Face to start the download. This is usually a temporary rate limit or outage — try again in a few minutes, or set a Hugging Face token in Settings to lift the limit."
+              "Couldn't reach Hugging Face to start the download. This is usually a temporary rate limit or outage — try again in a few minutes, or sign in to Hugging Face in Settings to lift the limit."
           )
           return
         }
@@ -295,7 +295,9 @@ class ModelManager: NSObject, URLSessionDataDelegate {
   func makeDataTask(
     for url: URL, modelId: String, writer: PartialWriter
   ) -> URLSessionDataTask {
-    var request = HFRequest.make(url, token: UserSettings.hfToken)
+    // Sync, so it can't refresh: every path here first awaits `HFAuth.token()`
+    // (the plan fetch, `restartTask`), which leaves the stored token fresh.
+    var request = HFRequest.make(url, token: HFAuth.currentToken)
     if writer.bytesWritten > 0 {
       request.setValue("bytes=\(writer.bytesWritten)-", forHTTPHeaderField: "Range")
       logger.info(
@@ -355,7 +357,7 @@ class ModelManager: NSObject, URLSessionDataDelegate {
   private nonisolated func fetchHFDownloadPlan(for model: Model) async -> HFDownloadPlan? {
     guard let repoDir = HFCache.repoDirName(from: model.downloadUrl) else { return nil }
 
-    let token = await MainActor.run { UserSettings.hfToken }
+    let token = await HFAuth.token()
 
     let allMetadata = await HFCache.fetchFileMetadata(
       for: model.allDownloadUrls, token: token)

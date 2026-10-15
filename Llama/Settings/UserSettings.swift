@@ -48,6 +48,7 @@ enum UserSettings {
     static let agentMode = "agentMode"
     static let hfCacheDirectory = "hfCacheDirectory"
     static let hfToken = "hfToken"
+    static let hfAccount = "hfAccount"
     static let modelLastUsedDates = "modelLastUsedDates"
     static let useFullWorkingSet = "useFullWorkingSet"
     static let globalInputShortcut = "globalInputShortcut"
@@ -486,7 +487,9 @@ enum UserSettings {
 
   // MARK: - Hugging Face Token
 
-  /// Optional token that authenticates downloads from Hugging Face.
+  /// Optional pasted token that authenticates downloads from Hugging Face --
+  /// the alternative to signing in (`hfAccount`). Requests read whichever is
+  /// set through `HFAuth.currentToken`, not this directly.
   /// Stored in UserDefaults (not Keychain) — fine given most users would use
   /// a fine-grained token with minimal permissions.
   static var hfToken: String? {
@@ -498,6 +501,26 @@ enum UserSettings {
         defaults.set(newValue, forKey: Keys.hfToken)
       } else {
         defaults.removeObject(forKey: Keys.hfToken)
+      }
+    }
+  }
+
+  /// The account signed in with "Sign in with Hugging Face", or nil. Written
+  /// only by `HFAuth`.
+  /// UserDefaults (not Keychain), like `hfToken`: the grant's only scope that
+  /// touches content is `gated-repos` -- read-only access to public gated
+  /// repos -- so its tokens are no more sensitive than a fine-grained one.
+  static var hfAccount: HFAccount? {
+    get {
+      defaults.data(forKey: Keys.hfAccount).flatMap {
+        try? JSONDecoder().decode(HFAccount.self, from: $0)
+      }
+    }
+    set {
+      if let newValue, let data = try? JSONEncoder().encode(newValue) {
+        defaults.set(data, forKey: Keys.hfAccount)
+      } else {
+        defaults.removeObject(forKey: Keys.hfAccount)
       }
     }
   }

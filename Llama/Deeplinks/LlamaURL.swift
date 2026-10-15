@@ -15,14 +15,21 @@ enum LlamaURL: Equatable {
   /// otherwise pick whichever build it ranked higher). The `llama` schemes are
   /// canonical post-rename to Llama; `llamabarn` is a deprecated alias kept only
   /// so old links keep working — don't advertise it in new links.
-  private static let registeredSchemes: Set<String> = {
+  private static let registeredSchemes: Set<String> = Set(schemes)
+
+  /// The build's canonical scheme -- `llama`, or `llama-dev` in dev builds.
+  /// First in `CFBundleURLSchemes`; the `llamabarn` alias comes after it.
+  static var primaryScheme: String { schemes[0] }
+
+  /// `CFBundleURLSchemes` in declaration order, lowercased.
+  private static let schemes: [String] = {
     guard
       let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes")
         as? [[String: Any]],
       let schemes = types.first?["CFBundleURLSchemes"] as? [String],
       !schemes.isEmpty
     else { return ["llama"] }
-    return Set(schemes.map { $0.lowercased() })
+    return schemes.map { $0.lowercased() }
   }()
 
   /// Parses a URL into a `LlamaURL`. Returns nil for anything that isn't a

@@ -1,3 +1,4 @@
+import AuthenticationServices
 import SwiftUI
 
 /// Settings window controller -- manages the settings window lifecycle.
@@ -463,7 +464,12 @@ struct SettingsView: View {
   @State private var globalShortcut = UserSettings.globalInputShortcut
   @State private var customWebUIDir = UserSettings.customWebUIDirectory
   @State private var hfToken = UserSettings.hfToken ?? ""
+  @State private var hfAccount = UserSettings.hfAccount
   @State private var showingHFTokenSheet = false
+  @State private var isSigningInToHF = false
+  @State private var hfSignInError: String?
+  // Presents HF's sign-in page anchored to this window.
+  @Environment(\.webAuthenticationSession) private var webAuthenticationSession
   @State private var showingServerCommandSheet = false
   // Effective server port; re-read after the edit sheet saves so the row updates.
   @State private var serverPort = LlamaServer.port
@@ -693,18 +699,43 @@ struct SettingsView: View {
           }
         }
 
+        // One credential at a time -- an account, a pasted token, or
+        // neither -- so the row never has to say which of two is in use.
+        // Signing in is the default path; the token stays for private repos
+        // (the sign-in doesn't ask for them) and for users who already have
+        // one. A pasted token's button reopens its sheet, where clearing it
+        // brings sign-in back.
         SettingRow(
-          title: "Hugging Face token",
+          title: "Hugging Face account",
           description: "Only needed for gated or private models."
         ) {
-          Button {
-            showingHFTokenSheet = true
-          } label: {
-            if hfToken.isEmpty {
-              // Ellipsis: the button opens a sheet that asks for input.
-              Text("Set…")
+          HStack(spacing: 6) {
+            if let hfAccount {
+              Text(hfAccount.username)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+              Button("Sign Out") {
+                HFAuth.signOut()
+                self.hfAccount = nil
+              }
+            } else if !hfToken.isEmpty {
+              Button(truncatedToken(hfToken)) {
+                showingHFTokenSheet = true
+              }
             } else {
-              Text(truncatedToken(hfToken))
+              // Ellipsis: opens a sheet that asks for input.
+              Button("Use Token…") {
+                showingHFTokenSheet = true
+              }
+
+              // Ellipsis: continues in the browser.
+              Button("Sign In…") {
+                signInToHF()
+              }
+              // A second click while the browser is up would start a second
+              // flow, which ASWebAuthenticationSession rejects anyway.
+              .disabled(isSigningInToHF)
             }
           }
         }
@@ -714,6 +745,17 @@ struct SettingsView: View {
           hfToken = newToken
           UserSettings.hfToken = newToken.isEmpty ? nil : newToken
         }
+      }
+      .alert(
+        "Couldn’t sign in to Hugging Face",
+        isPresented: Binding(
+          get: { hfSignInError != nil },
+          set: { if !$0 { hfSignInError = nil } }
+        )
+      ) {
+        Button("OK") {}
+      } message: {
+        Text(hfSignInError ?? "")
       }
 
       // Server section -- the command the app runs, and the log of what it
@@ -1177,6 +1219,24 @@ struct SettingsView: View {
       // differ in trailing slash / symlink resolution)
       hfCacheDir = UserSettings.hfCacheDirectory
       ModelManager.shared.refreshDownloadedModels()
+    }
+  }
+
+  /// Runs "Sign in with Hugging Face" and reflects the result in the row.
+  /// Cancelling (closing the browser sheet) just returns to the signed-out row.
+  private func signInToHF() {
+    isSigningInToHF = true
+    Task {
+      defer { isSigningInToHF = false }
+      do {
+        if let account = try await HFAuth.signIn(using: webAuthenticationSession) {
+          hfAccount = account
+          // Signing in replaces a pasted token (see `HFAuth.signIn`).
+          hfToken = ""
+        }
+      } catch {
+        hfSignInError = error.localizedDescription
+      }
     }
   }
 
