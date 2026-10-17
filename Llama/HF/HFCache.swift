@@ -41,6 +41,16 @@ enum HFCache {
     return "models--\(org)--\(repo)"
   }
 
+  /// The `org/name` repo id from a HF download URL, e.g.
+  /// `https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/file.gguf`
+  /// → `"unsloth/Qwen3.5-2B-GGUF"`. Nil for URLs that don't match the HF
+  /// resolve shape.
+  static func repoId(from url: URL) -> String? {
+    let components = url.pathComponents
+    guard components.count >= 4, components[3] == "resolve" else { return nil }
+    return "\(components[1])/\(components[2])"
+  }
+
   /// The repo-relative path a HF download URL points at (everything past
   /// `resolve/{branch}/`), preserving subdir structure. e.g.
   /// `https://huggingface.co/org/repo/resolve/main/Q4_K_M/model.gguf`
@@ -195,6 +205,31 @@ enum HFCache {
     let commitHash: String?
   }
 
+  /// A download refused because the repo is gated and the request doesn't
+  /// have access. HF tags these with `X-Error-Code: GatedRepo`, and its status
+  /// tells the two cases apart: 401 when the request wasn't authenticated, 403
+  /// when it was but the account isn't on the repo's authorized list.
+  ///
+  /// Worth its own error because the generic "couldn't reach Hugging Face"
+  /// sends the user after the wrong fix -- waiting out a rate limit, or
+  /// signing in when they already are -- while the real one is requesting
+  /// access on the model's page.
+  struct GatedRepoError: LocalizedError {
+    /// `org/name`
+    let repo: String
+    let authenticated: Bool
+
+    var errorDescription: String? {
+      // "This model", not the repo id: the alert already names the model, and
+      // the id appears once anyway, in the page URL. The URL is in the text
+      // because the alert this ends up in has no link.
+      let page = "huggingface.co/\(repo)"
+      return authenticated
+        ? "Your Hugging Face account doesn’t have access to this model yet. Request access on its page, then try again once it’s granted:\n\(page)"
+        : "This model is gated. Sign in to Hugging Face in Settings > Advanced, then request access on its page:\n\(page)"
+    }
+  }
+
   /// Fetches blob hash and commit hash for multiple files via HEAD requests.
   ///
   /// HF serves `X-Linked-Etag` (blob SHA256) and `X-Repo-Commit` (commit hash) in
@@ -202,9 +237,12 @@ enum HFCache {
   /// following redirects to the CDN, which would lose these headers.
   ///
   /// Uses a single URLSession for all requests (sessions are heavyweight).
+  ///
+  /// Throws `GatedRepoError` if HF refuses a file because the repo is gated;
+  /// any other failure just leaves that file out of the result.
   static func fetchFileMetadata(
     for urls: [URL], token: String?
-  ) async -> [URL: FileMetadata] {
+  ) async throws -> [URL: FileMetadata] {
     let delegate = SameHostRedirectDelegate()
     let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
     defer { session.finishTasksAndInvalidate() }
@@ -216,9 +254,17 @@ enum HFCache {
       request.httpMethod = "HEAD"
 
       guard let (_, response) = try? await session.data(for: request),
-        let httpResponse = response as? HTTPURLResponse,
-        (200...399).contains(httpResponse.statusCode)
+        let httpResponse = response as? HTTPURLResponse
       else { continue }
+
+      // Every file of a repo shares its gate, so the first refusal settles it.
+      if httpResponse.value(forHTTPHeaderField: "X-Error-Code") == "GatedRepo",
+        let repo = repoId(from: url)
+      {
+        throw GatedRepoError(repo: repo, authenticated: httpResponse.statusCode == 403)
+      }
+
+      guard (200...399).contains(httpResponse.statusCode) else { continue }
 
       // Extract blob hash from X-Linked-Etag (preferred) or ETag (fallback)
       let blobHash: String? = {

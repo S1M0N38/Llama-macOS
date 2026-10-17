@@ -72,7 +72,7 @@ enum HFRepoResolver {
     var recoverySuggestion: String? {
       switch self {
       case .gated:
-        return "Open Settings > Advanced and sign in to Hugging Face, then request access on the model’s Hugging Face page if you haven’t yet. For a private repo, use a token that has access to it."
+        return "Open Settings > Advanced and paste a Hugging Face access token that has access to this repo."
       case .networkUnavailable:
         return "Check your internet connection and try again."
       case .noCompatibleFile:

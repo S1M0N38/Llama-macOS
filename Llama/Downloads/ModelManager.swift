@@ -195,13 +195,22 @@ class ModelManager: NSObject, URLSessionDataDelegate {
     // HF cache is the only download destination; if metadata fetch fails, we abort —
     // there's no legacy flat fallback anymore.
     Task {
-      let plan = await self.fetchHFDownloadPlan(for: model)
+      let plan: HFDownloadPlan?
+      // Set when HF refused the files as gated -- the one failure here with a
+      // specific fix, so it gets its own message instead of the generic one.
+      var gatedError: HFCache.GatedRepoError?
+      do {
+        plan = try await self.fetchHFDownloadPlan(for: model)
+      } catch {
+        plan = nil
+        gatedError = error as? HFCache.GatedRepoError
+      }
       await MainActor.run {
         guard let plan else {
           self.failDownload(
             model: model,
-            reason:
-              "Couldn't reach Hugging Face to start the download. This is usually a temporary rate limit or outage — try again in a few minutes, or sign in to Hugging Face in Settings to lift the limit."
+            reason: gatedError?.errorDescription
+              ?? "Couldn't reach Hugging Face to start the download. This is usually a temporary rate limit or outage — try again in a few minutes, or sign in to Hugging Face in Settings to lift the limit."
           )
           return
         }
@@ -353,13 +362,14 @@ class ModelManager: NSObject, URLSessionDataDelegate {
 
   /// Fetches HF file metadata (commit hash, blob hashes) for a model via HEAD requests.
   /// Each HEAD request returns both X-Repo-Commit and X-Linked-Etag, so one request
-  /// per file gives us everything we need. Returns nil on failure (caller aborts download).
-  private nonisolated func fetchHFDownloadPlan(for model: Model) async -> HFDownloadPlan? {
+  /// per file gives us everything we need. Returns nil on failure (caller aborts download),
+  /// or throws `HFCache.GatedRepoError` when the repo is gated and we lack access.
+  private nonisolated func fetchHFDownloadPlan(for model: Model) async throws -> HFDownloadPlan? {
     guard let repoDir = HFCache.repoDirName(from: model.downloadUrl) else { return nil }
 
     let token = await HFAuth.token()
 
-    let allMetadata = await HFCache.fetchFileMetadata(
+    let allMetadata = try await HFCache.fetchFileMetadata(
       for: model.allDownloadUrls, token: token)
     guard !allMetadata.isEmpty else { return nil }
 
