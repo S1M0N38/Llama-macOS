@@ -104,6 +104,36 @@ class ItemView: NSView {
     dismissMenu()
   }
 
+  /// Opens the WebUI as a Safari Web App when the user has installed one for
+  /// this server, otherwise falls back to the default browser.
+  func openChat(_ url: URL) {
+    if let app = SafariWebApp.installed(matching: url) {
+      // Async like `openInBrowser`: a cold template launch must not hold the
+      // main thread. A detected bundle isn't guaranteed launchable (a copy
+      // from another Mac reads as damaged; LaunchServices can refuse the
+      // registration), so the WebUI URL rides along and the browser takes
+      // over when the launch fails -- the click must still open something.
+      SafariWebApp.launch(app, fallbackURL: url)
+      dismissMenu()
+      return
+    }
+    openInBrowser(url)
+  }
+
+  /// Opens `url` in the installed Safari Web App and closes the menu: the
+  /// link is delivered as an open-URL event, which the app's host turns into
+  /// webview navigation -- the one way a web app takes a URL other than its
+  /// pinned start URL, so the webui reads the same query a browser visit
+  /// would. Falls back to the browser when the link can't be delivered (see
+  /// `SafariWebApp.open`).
+  func openInWebApp(_ url: URL, app: URL) {
+    guard SafariWebApp.open(url, inWebAppAt: app) else {
+      openInBrowser(url)
+      return
+    }
+    dismissMenu()
+  }
+
   /// Dismisses the enclosing menu. Our menu items are disabled so clicks don't
   /// auto-close the menu (see the class note), which means a handler that
   /// navigates away has to close the menu itself. Without this the menu lingers;
