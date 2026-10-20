@@ -208,13 +208,9 @@ final class GlobalInputController {
     }
 
     logger.info("Dispatching captured prompt to \(url.absoluteString, privacy: .public)")
-    // The installed web app when there is one -- the same destination the
-    // menu's chat rows pick -- and the default browser otherwise. Either way
-    // the query travels whole: the webui reads `?q=`/`?model=` from the web
-    // app's open-URL delivery exactly as it would from a browser visit.
-    if let app = SafariWebApp.installed(forOriginOf: url), SafariWebApp.open(url, inWebAppAt: app) {
-      return
-    }
+    // The installed web app when there is one, like the menu's chat rows, so
+    // a captured prompt lands in the same window.
+    if SafariWebApp.open(url) { return }
     NSWorkspace.shared.open(url)
   }
 

@@ -262,7 +262,6 @@ final class HeaderView: ItemView {
 
   @objc private func openWebUi() {
     if let url = webUiUrl {
-      // The bare origin is what an installed Safari Web App matches.
       openChat(url)
     }
   }
