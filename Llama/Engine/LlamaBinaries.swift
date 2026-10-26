@@ -4,11 +4,20 @@ import os.log
 /// Resolves the `llama` executable the app drives, and classifies whether the
 /// app may update it.
 ///
-/// The app follows a shared-path model:
-/// - it manages the curl-install path (`~/.llama-app/llama`, what `install.sh`
-///   produces): it may install a binary there and keep it updated
-/// - any other install (e.g. Homebrew) is left unmanaged: the app uses it
-///   but never modifies it
+/// Lookup order:
+/// - a copy `install.sh` put on PATH (`~/.local/bin/llama`, a real file) --
+///   the user's own CLI, so the app runs the same build they get in a terminal
+/// - the app's own binary (`~/.llama-app/llama`), which it installs and keeps
+///   at `targetVersion`
+/// - Homebrew (or any other install in its bin dirs)
+///
+/// Only the app's own binary is managed (updated by the app); everything else
+/// is used as-is and never modified.
+///
+/// `install.sh` used to symlink `~/.local/bin/llama` to `~/.llama-app/llama`,
+/// so the two were one file. It now copies the binary instead, and rewrites
+/// `~/.llama-app` on every run. Checking the copy first is what keeps the two
+/// from fighting: once one exists, the app never uses `~/.llama-app`.
 ///
 /// `llama` is the unified llama.cpp executable -- the server is `llama serve`
 /// and memory profiling is `llama fit-params`, both subcommands of this one
@@ -17,11 +26,17 @@ enum LlamaBinaries {
 
   private static let logger = Logger(subsystem: Logging.subsystem, category: "LlamaBinaries")
 
-  /// The curl-install path the app manages (matches `install.sh`'s layout).
-  /// The real binary lives in `~/.llama-app`; `install.sh` also drops a
-  /// `~/.local/bin/llama` symlink onto PATH, but the app points at the real file.
+  /// Where the app installs and keeps its own binary. The same folder
+  /// `install.sh` downloads into, which is harmless: when `install.sh` has run,
+  /// its copy on PATH wins and this path goes unused.
   static let managedPath: String =
     (NSHomeDirectory() as NSString).appendingPathComponent(".llama-app/llama")
+
+  /// The `llama` on PATH. Either a real file (a copy from `install.sh`, which
+  /// the app uses first) or a symlink (the one the app creates to its own
+  /// binary, or one left by an older `install.sh`), which the app skips.
+  static let pathEntry: String =
+    (NSHomeDirectory() as NSString).appendingPathComponent(".local/bin/llama")
 
   /// Unmanaged locations to probe when the app hasn't installed its own binary.
   /// Covers the Homebrew bin dirs (Apple Silicon and Intel).
@@ -69,26 +84,44 @@ enum LlamaBinaries {
     (path as NSString).resolvingSymlinksInPath.contains("/Cellar/")
   }
 
-  /// Resolves the active `llama` binary: the managed path wins, then the
-  /// unmanaged locations in order. Nil when none is found, which is what sends
-  /// the app down the install flow.
+  /// Whether `pathEntry` is a real file -- a copy from `install.sh` -- rather
+  /// than a symlink. `destinationOfSymbolicLink` doesn't follow links, so it
+  /// succeeds exactly when the entry itself is one.
+  private static func isInstallScriptCopy() -> Bool {
+    let fm = FileManager.default
+    return fm.isExecutableFile(atPath: pathEntry)
+      && (try? fm.destinationOfSymbolicLink(atPath: pathEntry)) == nil
+  }
+
+  /// Dev affordance: pretend unmanaged installs (the `install.sh` copy,
+  /// Homebrew) aren't present, so the missing -> install path can be exercised
+  /// on a machine that already has llama.cpp. Toggle with:
+  ///   defaults write app.llama.Llama.dev ignoreUnmanagedLlama -bool YES
+  private static var ignoresUnmanaged: Bool {
+    #if DEBUG
+      return UserDefaults.standard.bool(forKey: "ignoreUnmanagedLlama")
+    #else
+      return false
+    #endif
+  }
+
+  /// Resolves the active `llama` binary in the order described on the type.
+  /// Nil when none is found, which is what sends the app down the install flow.
   static func resolve() -> (path: String, origin: Origin)? {
     let fm = FileManager.default
+
+    if !ignoresUnmanaged && isInstallScriptCopy() {
+      return (pathEntry, .external)
+    }
 
     if fm.isExecutableFile(atPath: managedPath) {
       return (managedPath, .managed)
     }
 
-    #if DEBUG
-      // Dev affordance: pretend unmanaged installs (e.g. Homebrew) aren't present,
-      // so the missing -> install path can be exercised on a machine that already
-      // has llama.cpp. Toggle with:
-      //   defaults write app.llama.Llama.dev ignoreUnmanagedLlama -bool YES
-      if UserDefaults.standard.bool(forKey: "ignoreUnmanagedLlama") {
-        logger.debug("ignoreUnmanagedLlama set; ignoring unmanaged installs")
-        return nil
-      }
-    #endif
+    if ignoresUnmanaged {
+      logger.debug("ignoreUnmanagedLlama set; ignoring unmanaged installs")
+      return nil
+    }
 
     for dir in unmanagedDirs {
       let path = dir + "/llama"

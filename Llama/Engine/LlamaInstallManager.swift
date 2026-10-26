@@ -24,8 +24,9 @@ final class LlamaInstallManager {
     case failed(message: String)
     /// An unmanaged (e.g. Homebrew) binary is present but below `floorVersion`.
     /// The app can't update it, so it nudges the user to do so. Non-blocking:
-    /// the server still runs, since the old binary often works.
-    case unmanagedTooOld(version: LlamaVersion)
+    /// the server still runs, since the old binary often works. `origin` picks
+    /// the advice: only a Homebrew install can be told the exact command.
+    case unmanagedTooOld(version: LlamaVersion, origin: LlamaBinaries.Origin)
   }
 
   private(set) var state: State = .idle {
@@ -105,7 +106,7 @@ final class LlamaInstallManager {
       // Can't touch an unmanaged install; nudge if below the floor but keep
       // running (warn, not block).
       if let version, version < LlamaBinaries.floorVersion {
-        state = .unmanagedTooOld(version: version)
+        state = .unmanagedTooOld(version: version, origin: origin)
       } else {
         state = .idle
       }
