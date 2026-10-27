@@ -5,8 +5,9 @@ import os.log
 /// app may update it.
 ///
 /// Lookup order:
-/// - a copy `install.sh` put on PATH (`~/.local/bin/llama`, a real file) --
-///   the user's own CLI, so the app runs the same build they get in a terminal
+/// - a copy `install.sh` put on PATH (`~/.local/bin/llama`, a real file) at or
+///   above `targetVersion` -- the user's own CLI, so the app runs the same
+///   build they get in a terminal
 /// - the app's own binary (`~/.llama-app/llama`), which it installs and keeps
 ///   at `targetVersion`
 /// - Homebrew (or any other install in its bin dirs)
@@ -14,10 +15,18 @@ import os.log
 /// Only the app's own binary is managed (updated by the app); everything else
 /// is used as-is and never modified.
 ///
+/// The `install.sh` copy has to be at least the pinned build because
+/// `install.sh` has no update mechanism -- unlike Homebrew, nobody runs a
+/// routine upgrade on it -- so using it unconditionally would leave the app on
+/// whatever build the user installed, for good. An older copy (or one whose
+/// version can't be read, e.g. a broken binary) is skipped instead, and the app
+/// falls back to its own pinned build. A newer one is used as-is: `install.sh`
+/// always installs the bucket's latest, which is usually ahead of the pin.
+///
 /// `install.sh` used to symlink `~/.local/bin/llama` to `~/.llama-app/llama`,
 /// so the two were one file. It now copies the binary instead, and rewrites
 /// `~/.llama-app` on every run. Checking the copy first is what keeps the two
-/// from fighting: once one exists, the app never uses `~/.llama-app`.
+/// from fighting: while a current one exists, the app never uses `~/.llama-app`.
 ///
 /// `llama` is the unified llama.cpp executable -- the server is `llama serve`
 /// and memory profiling is `llama fit-params`, both subcommands of this one
@@ -28,7 +37,8 @@ enum LlamaBinaries {
 
   /// Where the app installs and keeps its own binary. The same folder
   /// `install.sh` downloads into, which is harmless: when `install.sh` has run,
-  /// its copy on PATH wins and this path goes unused.
+  /// its copy on PATH wins and this path goes unused -- unless that copy falls
+  /// behind the pin, in which case the app falls back here and updates it.
   static let managedPath: String =
     (NSHomeDirectory() as NSString).appendingPathComponent(".llama-app/llama")
 
@@ -84,13 +94,17 @@ enum LlamaBinaries {
     (path as NSString).resolvingSymlinksInPath.contains("/Cellar/")
   }
 
-  /// Whether `pathEntry` is a real file -- a copy from `install.sh` -- rather
-  /// than a symlink. `destinationOfSymbolicLink` doesn't follow links, so it
-  /// succeeds exactly when the entry itself is one.
-  private static func isInstallScriptCopy() -> Bool {
+  /// Whether `pathEntry` is an `install.sh` copy the app should run: a real
+  /// file rather than a symlink (`destinationOfSymbolicLink` doesn't follow
+  /// links, so it succeeds exactly when the entry itself is one), at or above
+  /// `targetVersion`. Runs the binary to read its version, so it blocks.
+  private static func hasCurrentInstallScriptCopy() -> Bool {
     let fm = FileManager.default
-    return fm.isExecutableFile(atPath: pathEntry)
-      && (try? fm.destinationOfSymbolicLink(atPath: pathEntry)) == nil
+    guard fm.isExecutableFile(atPath: pathEntry),
+      (try? fm.destinationOfSymbolicLink(atPath: pathEntry)) == nil,
+      let version = readVersion(at: pathEntry)
+    else { return false }
+    return version >= targetVersion
   }
 
   /// Dev affordance: pretend unmanaged installs (the `install.sh` copy,
@@ -107,10 +121,14 @@ enum LlamaBinaries {
 
   /// Resolves the active `llama` binary in the order described on the type.
   /// Nil when none is found, which is what sends the app down the install flow.
+  ///
+  /// Runs a `version` subprocess when an `install.sh` copy is present, so call
+  /// off the main thread. Main-actor code (the server launch) reads the result
+  /// cached on `LlamaInstallManager` instead.
   static func resolve() -> (path: String, origin: Origin)? {
     let fm = FileManager.default
 
-    if !ignoresUnmanaged && isInstallScriptCopy() {
+    if !ignoresUnmanaged && hasCurrentInstallScriptCopy() {
       return (pathEntry, .external)
     }
 
@@ -134,6 +152,7 @@ enum LlamaBinaries {
   }
 
   /// The path to the `llama` binary to invoke, or `nil` if none is installed.
+  /// Blocks like `resolve()`, so call off the main thread.
   static var llamaPath: String? {
     guard let path = resolve()?.path else {
       logger.error("No llama binary found")

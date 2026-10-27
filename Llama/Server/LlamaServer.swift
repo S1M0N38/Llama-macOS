@@ -449,9 +449,12 @@ class LlamaServer {
   /// Builds the `llama serve` launch spec from the current settings. Pure with
   /// respect to process state -- it only reads settings, the resolved binary
   /// path and its version -- so the settings UI can call it to preview the
-  /// command. Returns nil only when no llama binary is installed.
+  /// command. Returns nil when no llama binary has been resolved: none is
+  /// installed, or the launch-time check hasn't finished yet.
   static func buildLaunchSpec() -> LaunchSpec? {
-    guard let llamaPath = LlamaBinaries.llamaPath else { return nil }
+    // The path resolved at launch, not a fresh `LlamaBinaries.llamaPath`:
+    // resolving can run a subprocess, and this runs on the main actor.
+    guard let llamaPath = LlamaInstallManager.shared.currentPath else { return nil }
 
     let presetsPath = UserSettings.appSupportDir.appendingPathComponent("models.ini").path
 

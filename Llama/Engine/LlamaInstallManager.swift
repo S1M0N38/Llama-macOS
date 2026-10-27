@@ -48,6 +48,13 @@ final class LlamaInstallManager {
   /// "Check for Updates") is explained rather than mysterious.
   private(set) var currentOrigin: LlamaBinaries.Origin = .managed
 
+  /// Path of the resolved binary, cached alongside `currentVersion` so the
+  /// server launch (on the main actor) doesn't resolve again: resolving can run
+  /// a `version` subprocess, which must stay off the main actor. It also keeps
+  /// the launched binary the one `currentVersion` describes, which flag gating
+  /// relies on. Nil until first resolved, or when no binary is present.
+  private(set) var currentPath: String?
+
   /// Ensures a usable `llama` binary is present -- installing one if none is
   /// found -- then starts the server. Runs at launch and from the menu's setup
   /// banner (retry a failed install, or re-check after a `brew upgrade`).
@@ -77,11 +84,12 @@ final class LlamaInstallManager {
       // running yet, so swapping the live path here is trivially safe.
       LlamaInstaller.promoteStaged(target: LlamaBinaries.targetVersion)
       return LlamaBinaries.resolve().map {
-        (origin: $0.origin, version: LlamaBinaries.readVersion(at: $0.path))
+        (path: $0.path, origin: $0.origin, version: LlamaBinaries.readVersion(at: $0.path))
       }
     }.value
 
-    guard let (origin, version) = found else { return await install() }
+    guard let (path, origin, version) = found else { return await install() }
+    currentPath = path
     currentVersion = version
     currentOrigin = origin
 
@@ -187,11 +195,15 @@ final class LlamaInstallManager {
     }
   }
 
-  /// Reads the in-use binary's version off the main thread and caches it.
+  /// Resolves the in-use binary off the main thread and caches its path and
+  /// version.
   private func refreshVersion() async {
-    currentVersion = await Task.detached {
-      guard let path = LlamaBinaries.llamaPath else { return nil }
-      return LlamaBinaries.readVersion(at: path)
+    let found = await Task.detached {
+      LlamaBinaries.resolve().map {
+        (path: $0.path, version: LlamaBinaries.readVersion(at: $0.path))
+      }
     }.value
+    currentPath = found?.path
+    currentVersion = found?.version
   }
 }
