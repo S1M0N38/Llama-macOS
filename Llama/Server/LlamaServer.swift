@@ -502,7 +502,8 @@ class LlamaServer {
     }
 
     // Bare toggles (no value) last, so they don't split the value flags above.
-    arguments.append(contentsOf: ["--jinja", "--spec-default"])
+    // No --jinja: it's been the server default since b7353, below the floor.
+    arguments.append("--spec-default")
 
     // Agent mode: enables the server's built-in tools and the UI's CORS/MCP
     // proxy. Opt-in via Settings; off by default because it lets models act
