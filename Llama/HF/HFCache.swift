@@ -423,19 +423,28 @@ enum HFCache {
 
   /// Deletes a model's files from the HF cache.
   /// Removes blobs (resolved from symlinks), snapshot symlinks, and cleans up empty dirs.
-  static func deleteModelFiles(cacheDir: URL, repoDir: String, paths: ResolvedPaths) throws {
+  ///
+  /// Leaves alone anything in `inUse` -- the paths of the other installed
+  /// models. Quants of one repo share their mmproj and draft head: the very
+  /// same snapshot symlink when installed at one commit, the same blob when
+  /// installed at different ones. Deleting one quant mustn't take the other's
+  /// sidecars with it -- the scan would then pair the other with nothing, and
+  /// it'd lose image input (or drafting) without a word.
+  static func deleteModelFiles(
+    cacheDir: URL, repoDir: String, paths: ResolvedPaths, keeping inUse: [String]
+  ) throws {
     let fm = FileManager.default
     var blobsToDelete: Set<String> = []
     var symlinksToDelete: [String] = []
 
+    let keptPaths = Set(inUse)
+    let keptBlobs = Set(inUse.compactMap(blobPath(ofSymlink:)))
+
     // Collect blob paths by following symlinks
-    for path in paths.allPaths {
+    for path in paths.allPaths where !keptPaths.contains(path) {
       // Check if it's a symlink and resolve the blob
-      if let dest = try? fm.destinationOfSymbolicLink(atPath: path) {
-        // dest is relative like "../../blobs/{hash}", resolve it
-        let symlinkDir = URL(fileURLWithPath: path).deletingLastPathComponent()
-        let blobAbsolute = symlinkDir.appendingPathComponent(dest).standardized.path
-        blobsToDelete.insert(blobAbsolute)
+      if let blob = blobPath(ofSymlink: path) {
+        blobsToDelete.insert(blob)
         symlinksToDelete.append(path)
       } else if fm.fileExists(atPath: path) {
         // Direct file (not a symlink) — just delete it
@@ -447,7 +456,7 @@ enum HFCache {
     for symlink in symlinksToDelete {
       try? fm.removeItem(atPath: symlink)
     }
-    for blob in blobsToDelete {
+    for blob in blobsToDelete.subtracting(keptBlobs) {
       if fm.fileExists(atPath: blob) {
         try fm.removeItem(atPath: blob)
       }
@@ -456,6 +465,18 @@ enum HFCache {
     // Clean up empty directories
     let repoBase = cacheDir.appendingPathComponent(repoDir)
     cleanEmptyDirs(at: repoBase)
+  }
+
+  /// The absolute path of the blob a snapshot symlink points at, nil when
+  /// `path` isn't a symlink. Both sides of `deleteModelFiles`' in-use check go
+  /// through here, so the paths they compare are built the same way.
+  private static func blobPath(ofSymlink path: String) -> String? {
+    guard let dest = try? FileManager.default.destinationOfSymbolicLink(atPath: path) else {
+      return nil
+    }
+    // dest is relative like "../../blobs/{hash}", resolve it
+    let symlinkDir = URL(fileURLWithPath: path).deletingLastPathComponent()
+    return symlinkDir.appendingPathComponent(dest).standardized.path
   }
 
   /// Recursively removes empty directories under the given path.

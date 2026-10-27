@@ -418,6 +418,9 @@ class ModelManager: NSObject, URLSessionDataDelegate {
     // Optimistically update state immediately for responsive UI
     downloadedModels.removeAll { $0.id == model.id }
     resolvedPaths.removeValue(forKey: model.id)
+    // Files the other installed models use, which deletion has to leave alone
+    // (see `deleteModelFiles`). Read here, while `resolvedPaths` is on hand.
+    let inUse = resolvedPaths.values.flatMap(\.allPaths)
     syncServer()
     NotificationCenter.default.post(name: .LBModelDownloadedListDidChange, object: self)
 
@@ -433,7 +436,8 @@ class ModelManager: NSObject, URLSessionDataDelegate {
           try HFCache.deleteModelFiles(
             cacheDir: cacheDir,
             repoDir: paths.hfRepoDirName,
-            paths: paths
+            paths: paths,
+            keeping: inUse
           )
         }
       } catch {
