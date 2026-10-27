@@ -998,7 +998,7 @@ class ModelManager: NSObject, URLSessionDataDelegate {
     guard model.isCompatible() else {
       let reason =
         model.incompatibilitySummary()
-        ?? "isn't compatible with this Mac's memory."
+        ?? "Not compatible with this Mac's memory"
       throw DownloadError.notCompatible(reason: reason)
     }
   }
