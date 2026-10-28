@@ -248,6 +248,15 @@ final class MenuController: NSObject, NSMenuDelegate {
     if discoverSuggestions.isEmpty { loadDiscoverSuggestions() }
   }
 
+  /// AppKit keeps at most one item highlighted per menu; mirror that state onto
+  /// the rows so a dropped tracking event cannot leave a row lit.
+  func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+    guard menu === statusItem.menu else { return }
+    for menuItem in menu.items {
+      (menuItem.view as? ItemView)?.setHighlight(menuItem === item)
+    }
+  }
+
   func menuDidClose(_ menu: NSMenu) {
     guard menu === statusItem.menu else { return }
     isMenuOpen = false

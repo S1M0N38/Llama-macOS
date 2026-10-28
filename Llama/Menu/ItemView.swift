@@ -3,14 +3,12 @@ import AppKit
 /// Minimal base class for interactive menu items.
 /// Provides a shared background container with selection highlight and a content area for subclasses.
 ///
-/// Uses NSTrackingArea to handle hover events for highlighting.
-/// This is necessary because we use disabled NSMenuItems (to prevent menu closing on click),
-/// which do not receive standard NSMenu highlighting events.
+/// Highlighting is driven by the menu's own highlight state (see
+/// `MenuController.menu(_:willHighlight:)`), which keeps at most one item lit.
 class ItemView: NSView {
   let backgroundView = NSView()
   let contentView = NSView()
 
-  private var trackingArea: NSTrackingArea?
   private(set) var isHighlighted = false
 
   // MARK: - Customization hooks
@@ -48,36 +46,6 @@ class ItemView: NSView {
   }
 
   // MARK: - Highlight handling
-
-  override func updateTrackingAreas() {
-    super.updateTrackingAreas()
-    if let trackingArea { removeTrackingArea(trackingArea) }
-    let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeAlways, .inVisibleRect]
-    trackingArea = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
-    addTrackingArea(trackingArea!)
-
-    // Sync highlight to the actual mouse position. NSTrackingArea doesn't fire
-    // mouseEntered if the area is created while the mouse is already inside, and
-    // it doesn't fire mouseExited when the view moves out from under a stationary
-    // cursor (e.g. scrolling a tall menu) -- both cases land here instead, since
-    // scrolling re-invokes updateTrackingAreas. Setting both directions keeps at
-    // most one row highlighted while scrolling.
-    if let window = window {
-      let mouseLocation = window.mouseLocationOutsideOfEventStream
-      let localPoint = convert(mouseLocation, from: nil)
-      setHighlight(bounds.contains(localPoint))
-    }
-  }
-
-  override func mouseEntered(with event: NSEvent) {
-    super.mouseEntered(with: event)
-    setHighlight(true)
-  }
-
-  override func mouseExited(with event: NSEvent) {
-    super.mouseExited(with: event)
-    setHighlight(false)
-  }
 
   /// Programmatically set selection highlight.
   func setHighlight(_ highlighted: Bool) {

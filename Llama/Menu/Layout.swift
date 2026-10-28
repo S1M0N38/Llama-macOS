@@ -118,10 +118,11 @@ extension NSView {
 }
 
 extension NSMenuItem {
-  /// Creates a disabled NSMenuItem backed by a custom view and optional minimum height.
+  /// Creates an NSMenuItem backed by a custom view and optional minimum height.
+  /// Items stay enabled so the menu tracks which row is highlighted; the view
+  /// handles its own clicks.
   static func viewItem(with view: NSView, minHeight: CGFloat? = nil) -> NSMenuItem {
     let item = NSMenuItem()
-    item.isEnabled = false
     item.view = view
     if let minHeight {
       view.heightAnchor.constraint(greaterThanOrEqualToConstant: minHeight).isActive = true
