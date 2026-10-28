@@ -71,6 +71,7 @@ class ItemView: NSView {
 
   override func mouseEntered(with event: NSEvent) {
     super.mouseEntered(with: event)
+    clearOtherRowHighlights()
     setHighlight(true)
   }
 
@@ -82,10 +83,23 @@ class ItemView: NSView {
   /// Programmatically set selection highlight.
   func setHighlight(_ highlighted: Bool) {
     let shouldHighlight = highlighted && highlightEnabled
+    if shouldHighlight {
+      clearOtherRowHighlights()
+    }
     guard shouldHighlight != isHighlighted else { return }
     isHighlighted = shouldHighlight
     backgroundView.setHighlight(shouldHighlight, cornerRadius: Layout.cornerRadius)
     highlightDidChange(shouldHighlight)
+  }
+
+  /// AppKit can drop `mouseExited` when the pointer crosses adjacent tracking
+  /// areas, leaving the previous row filled. Clear the other rows explicitly.
+  private func clearOtherRowHighlights() {
+    guard let items = enclosingMenuItem?.menu?.items else { return }
+    for item in items {
+      guard let row = item.view as? ItemView, row !== self else { continue }
+      row.setHighlight(false)
+    }
   }
 
   // MARK: - Helpers
