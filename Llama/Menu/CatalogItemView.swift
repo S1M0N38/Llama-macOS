@@ -63,6 +63,8 @@ final class CatalogItemView: ItemView {
 
   required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+  override var traceLabel: String { suggestion.repo }
+
   private func setupLayout() {
     let textColumn = NSStackView(views: [titleLabel, subtitleLabel])
     textColumn.orientation = .vertical

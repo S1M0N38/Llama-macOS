@@ -143,6 +143,7 @@ final class MenuController: NSObject, NSMenuDelegate {
     menu.delegate = self
     menu.autoenablesItems = false
     statusItem.menu = menu
+    HoverTrace.start(menu: menu)
   }
 
   /// Icon opacity for the current server state: full when a model is loaded, mid
@@ -236,6 +237,7 @@ final class MenuController: NSObject, NSMenuDelegate {
 
   func menuWillOpen(_ menu: NSMenu) {
     guard menu === statusItem.menu else { return }
+    HoverTrace.menuWillOpen(menu)
     isMenuOpen = true
     // Opening the menu is the user seeing what finished -- clear the checkmark.
     // (A still-active download keeps its arrow: that's derived live from state.)
@@ -250,6 +252,7 @@ final class MenuController: NSObject, NSMenuDelegate {
 
   func menuDidClose(_ menu: NSMenu) {
     guard menu === statusItem.menu else { return }
+    HoverTrace.menuDidClose(menu)
     isMenuOpen = false
 
     // Reset navigation and section collapse state
@@ -260,6 +263,8 @@ final class MenuController: NSObject, NSMenuDelegate {
   // MARK: - Menu Construction
 
   private func rebuildMenu(_ menu: NSMenu) {
+    HoverTrace.rebuildStarted(menu)
+    defer { HoverTrace.rebuildFinished(menu) }
     menu.removeAllItems()
 
     // Resolve the selected model up front: it decides whether this is the model

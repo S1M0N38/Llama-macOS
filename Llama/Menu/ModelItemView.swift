@@ -149,6 +149,8 @@ final class ModelItemView: ItemView, NSGestureRecognizerDelegate {
 
   required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+  override var traceLabel: String { model.id }
+
   private func setupLayout() {
     // Text column
     let textColumn = NSStackView(views: [titleLabel, subtitleLabel])

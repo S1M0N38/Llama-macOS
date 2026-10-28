@@ -70,6 +70,8 @@ final class TextItemView: ItemView {
 
   override var highlightEnabled: Bool { onAction != nil }
 
+  override var traceLabel: String { label.stringValue }
+
   override func mouseUp(with event: NSEvent) {
     super.mouseUp(with: event)
     if bounds.contains(convert(event.locationInWindow, from: nil)) {

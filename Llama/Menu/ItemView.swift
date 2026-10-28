@@ -20,6 +20,10 @@ class ItemView: NSView {
   /// Called whenever the selection highlight changes.
   func highlightDidChange(_ highlighted: Bool) {}
 
+  /// Name used in hover traces. Subclasses with a meaningful identity (a model
+  /// id, a page title) override this so the log is readable.
+  var traceLabel: String { String(describing: type(of: self)) }
+
   override init(frame frameRect: NSRect) {
     super.init(frame: frameRect)
     translatesAutoresizingMaskIntoConstraints = false
@@ -51,6 +55,12 @@ class ItemView: NSView {
 
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
+    HoverTrace.log(
+      "updateTrackingAreas.begin", view: self,
+      extra: [
+        "oldTrackingAreas": trackingAreas.map { NSStringFromRect($0.rect) },
+        "oldHighlighted": isHighlighted,
+      ])
     if let trackingArea { removeTrackingArea(trackingArea) }
     let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeAlways, .inVisibleRect]
     trackingArea = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
@@ -65,23 +75,42 @@ class ItemView: NSView {
     if let window = window {
       let mouseLocation = window.mouseLocationOutsideOfEventStream
       let localPoint = convert(mouseLocation, from: nil)
-      setHighlight(bounds.contains(localPoint))
+      setHighlight(bounds.contains(localPoint), source: "updateTrackingAreas")
     }
+    HoverTrace.log(
+      "updateTrackingAreas.end", view: self,
+      extra: ["newTrackingAreas": trackingAreas.map { NSStringFromRect($0.rect) }])
   }
 
   override func mouseEntered(with event: NSEvent) {
+    HoverTrace.log("mouseEntered", view: self, nsEvent: event)
     super.mouseEntered(with: event)
-    setHighlight(true)
+    setHighlight(true, source: "mouseEntered")
+    HoverTrace.check(phase: "mouseEntered")
   }
 
   override func mouseExited(with event: NSEvent) {
+    HoverTrace.log("mouseExited", view: self, nsEvent: event)
     super.mouseExited(with: event)
-    setHighlight(false)
+    setHighlight(false, source: "mouseExited")
+    HoverTrace.check(phase: "mouseExited")
+  }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    HoverTrace.log(
+      "viewDidMoveToWindow", view: self,
+      extra: [
+        "window": window.map { "\(type(of: $0))#\($0.windowNumber)" } ?? "nil",
+        "wasHighlighted": isHighlighted,
+      ])
   }
 
   /// Programmatically set selection highlight.
-  func setHighlight(_ highlighted: Bool) {
+  func setHighlight(_ highlighted: Bool, source: String = "direct") {
     let shouldHighlight = highlighted && highlightEnabled
+    HoverTrace.logHighlightChange(
+      self, requested: highlighted, effective: shouldHighlight, was: isHighlighted, source: source)
     guard shouldHighlight != isHighlighted else { return }
     isHighlighted = shouldHighlight
     backgroundView.setHighlight(shouldHighlight, cornerRadius: Layout.cornerRadius)
